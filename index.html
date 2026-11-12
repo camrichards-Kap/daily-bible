@@ -144,6 +144,8 @@ select, input[type="text"] {
 .note a { color: var(--accent); }
 .text-foot { margin-top: 24px; font: 400 12px/1.5 var(--ui); color: var(--muted); text-align: center; }
 .text-foot a { color: var(--accent); }
+.version { margin: 0; font-size: 11px; color: var(--muted); text-align: center; }
+.test-btn { justify-self: start; padding: 9px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 500; cursor: pointer; }
 .text .note { margin: 0 0 .8em; }
 
 /* Bottom player */
@@ -220,6 +222,8 @@ select, input[type="text"] {
       <div class="field" id="voiceField">
         <label class="label" for="voice">Voice</label>
         <select id="voice"></select>
+        <button type="button" class="test-btn" id="testVoice">Test voice</button>
+        <p class="hint" id="testOut" hidden></p>
       </div>
       <div class="field">
         <span class="label" id="spLabel">Speed</span>
@@ -243,6 +247,7 @@ select, input[type="text"] {
   </details>
 
   <article class="text" id="text" aria-live="off"></article>
+  <p class="version">Version 7</p>
 </main>
 
 <div class="player">
@@ -271,8 +276,8 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>';
 const TR_HINT = {
   esv: "Professional narration from Crossway. Keeps playing with the screen locked. The highlight follows verse by verse.",
-  kjv: "King James Version, read by your phone's voice with the text highlighted as it goes. Keep the screen on.",
-  web: "World English Bible (modern English), read by your phone's voice with the text highlighted as it goes. Keep the screen on."
+  kjv: "King James Version, read by your phone's voice with the text highlighted as it goes. Phone voices are muted by the silent switch, so turn silent mode off.",
+  web: "World English Bible (modern English), read by your phone's voice with the text highlighted as it goes. Phone voices are muted by the silent switch, so turn silent mode off."
 };
 
 const $ = id => document.getElementById(id);
@@ -285,8 +290,7 @@ let settings = { tr: store.get("tr", "kjv"), voice: store.get("voice", ""), rate
 let current = new Date();
 let entry, playing = false, loading = false;
 let queue = [], qi = 0, utter = null, wakeLock = null, runId = 0, loadId = 0, queuePromise = null;
-let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, tick = 0, cps = 15, heard = false, warned = false, segDur = null, pendingSeek = -1, probing = "";
-const keep = new Audio("data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaAPAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA"); keep.loop = true;
+let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, tick = 0, cps = 15, heard = false, warned = false, forceVoice = false, segDur = null, pendingSeek = -1, probing = "";
 const audio = $("audio");
 
 function keyFor(d) {
@@ -508,11 +512,14 @@ function follow(el) {
 /* ---------- KJV / WEB: phone voice ---------- */
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
-  return settings.voice ? vs.find(v => v.voiceURI === settings.voice) || null : null;   // "Phone default" leaves the choice to the phone
+  if (settings.voice) return vs.find(v => v.voiceURI === settings.voice) || null;
+  if (!forceVoice) return null;                       // "Phone default" leaves the choice to the phone
+  const en = vs.filter(v => v.lang && v.lang.replace("_", "-").startsWith("en"));
+  return en.find(v => /samantha/i.test(v.name)) || en.find(v => v.lang.replace("_", "-") === "en-US") || en[0] || null;
 }
 function speakNext(id) {
   if (id !== runId || !playing) return;
-  if (qi >= queue.length) { playing = false; setButton(); releaseWake(); keep.pause(); markDone(); qi = 0; return; }
+  if (qi >= queue.length) { playing = false; setButton(); releaseWake(); markDone(); qi = 0; return; }
   const item = queue[qi];
   clearMarks();
   item.el.classList.add("cur"); lastItem = item;
@@ -551,7 +558,12 @@ function speakNext(id) {
     }
     if (id === runId && playing) { qi++; speakNext(id); }
   };
-  utter.onerror = e => { clearInterval(tick); if (id === runId && playing && e.error !== "interrupted" && e.error !== "canceled") { qi++; speakNext(id); } };
+  utter.onerror = e => {
+    clearInterval(tick);
+    if (id !== runId || !playing || e.error === "interrupted" || e.error === "canceled") return;
+    if (!heard) { stopAll(false); showMsg(`This phone refused to speak (reason: ${e.error || "unknown"}). Open Settings and tap Test voice, or switch to ESV.`); return; }
+    qi++; speakNext(id);
+  };
   speechSynthesis.speak(utter);
 }
 async function playSpeech() {
@@ -570,11 +582,16 @@ async function playSpeech() {
   startSpeaking(id);
 }
 function startSpeaking(id) {
-  try { keep.play().catch(() => {}); } catch {}       // silent loop: lets the voice be heard with the ring switch on silent
   heard = false;
   setTimeout(() => {
-    if (id === runId && playing && !heard && !warned) { warned = true; showMsg("No sound? Turn the volume up, flip the silent switch on the side of the phone, or pick a different voice in Settings."); }
-  }, 4000);
+    if (id !== runId || !playing || heard) return;
+    if (!forceVoice && !settings.voice) {              // the phone accepted the request but never started: try a named voice
+      forceVoice = true;
+      try { speechSynthesis.cancel(); } catch {}
+      setTimeout(() => { if (id === runId && playing) speakNext(id); }, 150);
+      setTimeout(() => { if (id === runId && playing && !heard) showMsg("This phone isn't starting its voice here. Open Settings and tap Test voice to see why."); }, 3500);
+    } else showMsg("This phone isn't starting its voice here. Open Settings and tap Test voice to see why.");
+  }, 2500);
   if (speechSynthesis.speaking || speechSynthesis.pending) {
     speechSynthesis.cancel();
     setTimeout(() => speakNext(id), 120);              // iPhone drops speech that starts in the same instant as a cancel
@@ -687,7 +704,6 @@ function stopAll(reset) {
   playing = false; loading = false;
   try { speechSynthesis.cancel(); } catch {}
   clearInterval(tick);
-  keep.pause();
   audio.pause();
   releaseWake();
   if (reset) { segDur = null; pendingSeek = -1; probing = ""; audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
@@ -717,6 +733,29 @@ document.querySelectorAll('input[name="sz"]').forEach(r => r.addEventListener("c
 $("esvKey").addEventListener("change", e => {
   settings.key = e.target.value.trim(); store.set("esvKey", settings.key); esvDay = null;
   if (settings.tr === "esv") loadText();
+});
+// Speaks one sentence and reports exactly what the phone did, so a silent voice can be diagnosed
+$("testVoice").addEventListener("click", () => {
+  const out = $("testOut"); out.hidden = false;
+  if (!("speechSynthesis" in window)) { out.textContent = "Result A: this browser has no voice feature at all."; return; }
+  stopAll(false);
+  const all = speechSynthesis.getVoices(), en = all.filter(v => v.lang && v.lang.replace("_", "-").startsWith("en")).length;
+  let started = false, finished = false, err = "";
+  const u = new SpeechSynthesisUtterance("This is your phone's voice. If you can hear this, it is working.");
+  const v = settings.voice ? all.find(x => x.voiceURI === settings.voice) : null; if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "en-US";
+  u.rate = settings.rate;
+  u.onstart = () => { started = true; show(); }; u.onend = () => { finished = true; show(); }; u.onerror = e => { err = e.error || "unknown"; show(); };
+  window._testU = u;
+  const show = () => {
+    const info = ` (${all.length} voices, ${en} English)`;
+    out.textContent = err ? `Result B: the phone refused to speak. Reason given: ${err}.${info}`
+      : finished ? `Result C: the phone says it spoke the whole sentence. If you heard nothing, the phone is muting it: turn off silent mode and turn the volume up.${info}`
+      : started ? `Speaking now…${info}`
+      : `Result D: the phone accepted the request but never started speaking.${info}`;
+  };
+  out.textContent = "Testing…";
+  speechSynthesis.speak(u);
+  setTimeout(() => { if (!started && !err) show(); }, 3000);
 });
 $("voice").addEventListener("change", e => { settings.voice = e.target.value; store.set("voice", settings.voice); });
 
