@@ -113,13 +113,13 @@ summary .cur { color: var(--fg); }
 .seg label { flex: 1; position: relative; }
 .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .seg span {
-  display: block; text-align: center; padding: 8px 4px; border-radius: 9px;
+  display: block; text-align: center; padding: 8px 2px; white-space: nowrap; border-radius: 9px;
   font-size: 14px; font-weight: 500; color: var(--muted);
 }
 .seg input:checked + span { background: var(--accent); color: var(--on-accent); }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 .hint { margin: 0; font-size: 13px; color: var(--muted); }
-select {
+select, input[type="text"] {
   width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line);
   background: var(--surface); color: var(--fg); font: 400 15px var(--ui);
 }
@@ -140,6 +140,8 @@ select {
 .w.on { background: var(--mark); color: var(--mark-fg); box-shadow: 0 0 0 2px var(--mark); }
 .note { margin: 0; font: 400 15px/1.55 var(--ui); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
 .note strong { color: var(--fg); font-weight: 600; }
+.note ol { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+.note a { color: var(--accent); }
 .text-foot { margin-top: 24px; font: 400 12px var(--ui); color: var(--muted); text-align: center; }
 
 /* Bottom player */
@@ -208,6 +210,11 @@ select {
         </div>
         <p class="hint" id="trHint"></p>
       </div>
+      <div class="field" id="keyField">
+        <label class="label" for="esvKey">ESV text key</label>
+        <input type="text" id="esvKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your key from api.esv.org">
+        <p class="hint">Needed to show ESV text. It is saved on this phone only.</p>
+      </div>
       <div class="field" id="voiceField">
         <label class="label" for="voice">Voice</label>
         <select id="voice"></select>
@@ -219,6 +226,7 @@ select {
           <label><input type="radio" name="sp" id="sp-1" value="1"><span>1×</span></label>
           <label><input type="radio" name="sp" id="sp-125" value="1.25"><span>1.25×</span></label>
           <label><input type="radio" name="sp" id="sp-15" value="1.5"><span>1.5×</span></label>
+          <label><input type="radio" name="sp" id="sp-2" value="2"><span>2×</span></label>
         </div>
       </div>
       <div class="field">
@@ -257,7 +265,7 @@ const SPOKEN = ["Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Jos
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.52.85l10.4-6.5a1 1 0 0 0 0-1.7L9.52 4.65A1 1 0 0 0 8 5.5z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>';
 const TR_HINT = {
-  esv: "Professional narration from Crossway. Keeps playing with the screen locked. No follow-along text.",
+  esv: "Professional narration from Crossway. Keeps playing with the screen locked. The highlight follows verse by verse.",
   kjv: "King James Version, read by your phone's voice with the text highlighted as it goes. Keep the screen on.",
   web: "World English Bible (modern English), read by your phone's voice with the text highlighted as it goes. Keep the screen on."
 };
@@ -268,11 +276,12 @@ const store = {
   set(k, v) { try { localStorage.setItem("db." + k, JSON.stringify(v)); } catch {} }
 };
 
-let settings = { tr: store.get("tr", "kjv"), voice: store.get("voice", ""), rate: store.get("rate", 1), size: store.get("size", 19) };
+let settings = { tr: store.get("tr", "kjv"), voice: store.get("voice", ""), rate: store.get("rate", 1), size: store.get("size", 19), key: store.get("esvKey", "") };
 let current = new Date();
 let entry, playing = false, loading = false;
 let queue = [], qi = 0, utter = null, wakeLock = null, runId = 0, loadId = 0, queuePromise = null;
-let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, tick = 0, cps = 15, primed = false;
+let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, tick = 0, cps = 15, heard = false, warned = false, segDur = null, pendingSeek = -1, probing = "";
+const keep = new Audio("data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaAPAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA"); keep.loop = true;
 const audio = $("audio");
 
 function keyFor(d) {
@@ -302,12 +311,14 @@ function idleStatus() {
 }
 function renderSettings() {
   $("tr-" + settings.tr).checked = true;
-  const sp = { 0.75: "sp-075", 1: "sp-1", 1.25: "sp-125", 1.5: "sp-15" }[settings.rate] || "sp-1";
+  const sp = { 0.75: "sp-075", 1: "sp-1", 1.25: "sp-125", 1.5: "sp-15", 2: "sp-2" }[settings.rate] || "sp-1";
   $(sp).checked = true;
   $({ 17: "sz-s", 19: "sz-m", 22: "sz-l" }[settings.size] || "sz-m").checked = true;
   document.documentElement.style.setProperty("--text-size", settings.size + "px");
   $("trHint").textContent = TR_HINT[settings.tr];
   $("voiceField").hidden = settings.tr === "esv";
+  $("keyField").hidden = settings.tr !== "esv";
+  if (document.activeElement !== $("esvKey")) $("esvKey").value = settings.key;
   $("settingsSummary").textContent = settings.tr.toUpperCase() + (settings.rate !== 1 ? ` · ${settings.rate}×` : "");
 }
 function setStatus(main, sub, pct, done) {
@@ -362,20 +373,44 @@ async function fetchChapter(tr, b, c) {
   }
   throw new Error("fetch failed");
 }
+let esvDay = null;
+async function loadEsvDay() {
+  const dayKey = keyFor(current) + settings.key;
+  if (esvDay && esvDay.key === dayKey) return esvDay.map;
+  const segs = [...entry[1][1], ...entry[2][1]];
+  const q = segs.map(([b, c, f, t]) => code(b, c, f) + "-" + code(b, c, t)).join(",");
+  const opts = "include-passage-references=false&include-verse-numbers=true&include-first-verse-numbers=true&include-footnotes=false&include-footnote-body=false&include-headings=false&include-short-copyright=false&include-copyright=false&include-passage-horizontal-lines=false&include-heading-horizontal-lines=false&include-selahs=true&indent-paragraphs=0&indent-poetry=false&indent-declares=0&indent-psalm-doxology=0&line-length=0";
+  const r = await fetch(`https://api.esv.org/v3/passage/text/?q=${q}&${opts}`, { headers: { Authorization: "Token " + settings.key.trim() } });
+  if (r.status === 401 || r.status === 403) throw new Error("key");
+  if (!r.ok) throw new Error("esv");
+  const j = await r.json();
+  if (!j.passages || j.passages.length !== segs.length) throw new Error("esv");
+  const map = {};
+  segs.forEach(([b, c, f], i) => {
+    const parts = j.passages[i].split(/\[(?:\d+:)?(\d+)\]/);   // "[1] text [2] text" -> verse numbers and text
+    const verses = [];
+    for (let k = 1; k < parts.length; k += 2) verses.push([+parts[k], parts[k + 1].replace(/\s+/g, " ").trim()]);
+    if (!verses.length && parts[0].trim()) verses.push([f, parts[0].replace(/\s+/g, " ").trim()]);
+    map[b + "." + c + "." + f] = verses;
+  });
+  esvDay = { key: dayKey, map };
+  return map;
+}
 const headingText = (b, c) => b === 18 ? `Psalm ${c}` : `${SPOKEN[b]} ${c}`;
 const spokenHeading = (b, c, f) => (b === 18 ? `Psalm ${c}.` : `${SPOKEN[b]}, chapter ${c}.`) + (f > 1 ? ` Beginning at verse ${f}.` : "");
 
 // Build the queue of things to read and the matching page elements, so the highlight can follow.
 async function buildQueue(tr) {
-  const q = [];
+  const q = []; let segIndex = 0;
   const frag = document.createDocumentFragment();
   for (const [which, part, label] of [["ot", entry[1], "Old Testament"], ["nt", entry[2], "New Testament"]]) {
     const h2 = document.createElement("h2"); h2.textContent = `${label} · ${part[0]}`; frag.append(h2);
     for (const [b, c, f, t] of part[1]) {
-      const verses = await fetchChapter(tr, b, c);
-      const h3 = document.createElement("h3"); h3.textContent = headingText(b, c) + (f > 1 || t < verses.length ? `:${f}–${t}` : "");
+      const verses = tr === "esv" ? (await loadEsvDay())[b + "." + c + "." + f] : await fetchChapter(tr, b, c);
+      const si = segIndex++;
+      const h3 = document.createElement("h3"); h3.textContent = headingText(b, c) + (f > 1 || (tr !== "esv" && t < verses.length) ? `:${f}–${t}` : "");
       frag.append(h3);
-      q.push({ which, label: part[0], text: spokenHeading(b, c, f), el: h3, words: [], where: headingText(b, c) });
+      q.push({ which, label: part[0], text: spokenHeading(b, c, f), el: h3, words: [], where: headingText(b, c), si, wt: 18 });
       for (const [v, text] of verses) {
         if (v < f || v > t || !text) continue;
         const p = document.createElement("p"); p.className = "v"; p.dataset.i = q.length;
@@ -387,13 +422,14 @@ async function buildQueue(tr) {
           else { const s = document.createElement("span"); s.className = "w"; s.textContent = tok; p.append(s); words.push({ start: pos, end: pos + tok.length, el: s }); }
           pos += tok.length;
         }
-        q.push({ which, label: part[0], text, el: p, words, where: `${headingText(b, c)}:${v}` });
+        q.push({ which, label: part[0], text, el: p, words, where: `${headingText(b, c)}:${v}`, si, wt: text.length + 10 });
         frag.append(p);
       }
     }
   }
   const foot = document.createElement("p"); foot.className = "text-foot";
-  foot.textContent = tr === "kjv" ? "King James Version · public domain" : "World English Bible · public domain";
+  foot.textContent = tr === "kjv" ? "King James Version · public domain" : tr === "web" ? "World English Bible · public domain"
+    : "Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.";
   frag.append(foot);
   return { q, frag };
 }
@@ -401,8 +437,8 @@ function loadText() {
   const id = ++loadId;
   const art = $("text");
   queue = []; qi = 0; queuePromise = null; lastWord = lastItem = null;
-  if (settings.tr === "esv") {
-    art.innerHTML = '<p class="note"><strong>Follow-along text works with KJV and WEB.</strong> The ESV recording is a single audio file with no word timing, and ESV text needs a key from Crossway. Switch to KJV or WEB in Settings to read along with the highlight.</p>';
+  if (settings.tr === "esv" && !settings.key.trim()) {
+    art.innerHTML = '<div class="note"><strong>The ESV audio is ready. Tap play.</strong> To also read along in ESV, add a free key from Crossway:<ol><li>Go to <a href="https://api.esv.org/account/create-application/" target="_blank" rel="noopener">api.esv.org</a> and create a free account.</li><li>Create an API application. Personal, non-commercial use is free.</li><li>Copy the key it gives you.</li><li>Open Settings here and paste it under ESV text key.</li></ol></div>';
     return;
   }
   art.innerHTML = '<p class="note">Loading the text…</p>';
@@ -411,9 +447,16 @@ function loadText() {
     if (id !== loadId) return null;
     art.replaceChildren(frag);
     queue = q; qi = 0;
+    if (tr === "esv") buildTimeline();
     return q;
-  }).catch(() => {
+  }).catch(e => {
     if (id !== loadId) return null;
+    if (tr === "esv") {
+      art.innerHTML = e.message === "key"
+        ? '<p class="note"><strong>Crossway didn\'t accept that key.</strong> Check it in Settings under ESV text key. The audio still plays.</p>'
+        : '<p class="note"><strong>Couldn\'t load the ESV text.</strong> Check your connection and reopen the app. The audio still plays.</p>';
+      queuePromise = null; return null;
+    }
     art.innerHTML = '<p class="note"><strong>Couldn\'t load the text.</strong> The app\'s text folder may not have been uploaded with it. Upload the whole daily-bible.zip, not just index.html.</p>';
     queuePromise = null;
     return null;
@@ -435,11 +478,11 @@ function follow(el) {
 /* ---------- KJV / WEB: phone voice ---------- */
 function pickVoice() {
   const vs = speechSynthesis.getVoices();
-  return vs.find(v => v.voiceURI === settings.voice) || vs.find(v => v.lang && v.lang.startsWith("en") && v.default) || vs.find(v => v.lang && v.lang.startsWith("en")) || null;
+  return settings.voice ? vs.find(v => v.voiceURI === settings.voice) || null : null;   // "Phone default" leaves the choice to the phone
 }
 function speakNext(id) {
   if (id !== runId || !playing) return;
-  if (qi >= queue.length) { playing = false; setButton(); releaseWake(); markDone(); qi = 0; return; }
+  if (qi >= queue.length) { playing = false; setButton(); releaseWake(); keep.pause(); markDone(); qi = 0; return; }
   const item = queue[qi];
   clearMarks();
   item.el.classList.add("cur"); lastItem = item;
@@ -459,10 +502,10 @@ function speakNext(id) {
   };
   let started = 0, sawBoundary = false;
   clearInterval(tick);
-  utter.onstart = () => { started = performance.now(); };
+  utter.onstart = () => { started = performance.now(); heard = true; };
   utter.onboundary = e => {
     if (id !== runId || (e.name && e.name !== "word") || !item.words.length) return;
-    sawBoundary = true; mark(e.charIndex);
+    sawBoundary = true; heard = true; mark(e.charIndex);
   };
   if (item.words.length) tick = setInterval(() => {
     if (id !== runId || !playing) { clearInterval(tick); return; }
@@ -471,7 +514,7 @@ function speakNext(id) {
     mark((performance.now() - started) / 1000 * cps * settings.rate);
   }, 90);
   utter.onend = () => {
-    clearInterval(tick);
+    clearInterval(tick); heard = true;
     if (started && item.text.length > 40) {         // learn this voice's real pace for the estimate
       const secs = (performance.now() - started) / 1000;
       if (secs > 1) cps = Math.min(24, Math.max(8, cps * .6 + (item.text.length / secs / settings.rate) * .4));
@@ -494,8 +537,18 @@ async function playSpeech() {
   }
   lastUserScroll = 0;
   playing = true; setButton(); requestWake();
-  speechSynthesis.cancel();
-  setTimeout(() => speakNext(id), 80);   // iPhone drops speech that starts in the same instant as a cancel
+  startSpeaking(id);
+}
+function startSpeaking(id) {
+  try { keep.play().catch(() => {}); } catch {}       // silent loop: lets the voice be heard with the ring switch on silent
+  heard = false;
+  setTimeout(() => {
+    if (id === runId && playing && !heard && !warned) { warned = true; showMsg("No sound? Turn the volume up, flip the silent switch on the side of the phone, or pick a different voice in Settings."); }
+  }, 4000);
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel();
+    setTimeout(() => speakNext(id), 120);              // iPhone drops speech that starts in the same instant as a cancel
+  } else speakNext(id);                                 // start right inside the tap, which iPhone requires
 }
 async function requestWake() { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {} }
 function releaseWake() { try { wakeLock?.release(); } catch {} wakeLock = null; }
@@ -503,10 +556,15 @@ function releaseWake() { try { wakeLock?.release(); } catch {} wakeLock = null; 
 // Tap a verse to read from there
 $("text").addEventListener("click", e => {
   const p = e.target.closest(".v"); if (!p || !queue.length) return;
-  prime();
-  qi = +p.dataset.i;
+  const i = +p.dataset.i;
+  if (settings.tr === "esv") {
+    if (audio.duration && queue[i].t0 != null) { audio.currentTime = queue[i].t0; if (!playing) playEsv(); }
+    else { pendingSeek = i; if (!playing) playEsv(); }
+    return;
+  }
+  qi = i;
   clearMarks(); p.classList.add("cur"); lastItem = queue[qi];
-  if (playing) { const id = ++runId; speechSynthesis.cancel(); setTimeout(() => speakNext(id), 60); }
+  if (playing) startSpeaking(++runId);
   else playSpeech();
 });
 
@@ -527,7 +585,8 @@ function playEsv() {
   audio.playbackRate = settings.rate;
   loading = true; setButton();
   audio.play().then(() => {
-    loading = false; playing = true; setButton();
+    loading = false; playing = true; setButton(); lastUserScroll = 0;
+    probeDurations(url);
     if ("mediaSession" in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({ title: `${entry[1][0]} · ${entry[2][0]}`, artist: `ESV · Day ${entry[0]}`, album: "Daily Bible" });
     }
@@ -536,9 +595,52 @@ function playEsv() {
     showMsg("The ESV audio didn't load. Check your connection, or switch to KJV in Settings.");
   });
 }
+// Work out roughly when each verse starts in the recording. The recording has no verse timings,
+// so time is shared out by verse length, pinned to the real length of each chapter when we can get it.
+function buildTimeline() {
+  if (!queue.length || settings.tr !== "esv") return;
+  if (playing && audio.dataset.url) probeDurations(audio.dataset.url);
+  if (!audio.duration) return;
+  const nSeg = queue[queue.length - 1].si + 1, wSeg = Array(nSeg).fill(0);
+  for (const it of queue) wSeg[it.si] += it.wt;
+  const total = wSeg.reduce((a, b) => a + b, 0);
+  let dur = wSeg.map(w => w / total * audio.duration);
+  if (segDur && segDur.length === nSeg && segDur.every(d => d > 0)) {
+    const sum = segDur.reduce((a, b) => a + b, 0);
+    if (Math.abs(sum - audio.duration) / audio.duration < .08) dur = segDur.map(d => d / sum * audio.duration);
+  }
+  const start = []; dur.reduce((a, d, i) => (start[i] = a, a + d), 0);
+  const used = Array(nSeg).fill(0);
+  for (const it of queue) { it.t0 = start[it.si] + used[it.si] / wSeg[it.si] * dur[it.si]; used[it.si] += it.wt; }
+  if (pendingSeek >= 0 && queue[pendingSeek]) { audio.currentTime = queue[pendingSeek].t0; pendingSeek = -1; }
+}
+function probeDurations(url) {
+  if (segDur || probing === url || !queue.length) return;
+  probing = url;
+  const segs = [...entry[1][1], ...entry[2][1]];
+  if (segs.length < 2) return;
+  Promise.all(segs.map(([b, c, f, t]) => new Promise(res => {
+    const a = new Audio(); a.preload = "metadata";
+    const done = v => { a.removeAttribute("src"); res(v); };
+    a.onloadedmetadata = () => done(a.duration); a.onerror = () => done(0);
+    setTimeout(() => done(0), 10000);
+    a.src = "https://audio.esv.org/hw/" + code(b, c, f) + "-" + code(b, c, t) + ".mp3";
+  }))).then(d => { if (audio.dataset.url === url) { segDur = d; buildTimeline(); } });
+}
+audio.addEventListener("loadedmetadata", buildTimeline);
+audio.addEventListener("durationchange", buildTimeline);
 audio.addEventListener("timeupdate", () => {
   if (!audio.duration || settings.tr !== "esv") return;
   const p = audio.currentTime / audio.duration, ot = p < otShare();
+  let where = "";
+  if (queue.length && queue[0].t0 != null) {
+    let it = queue[0];
+    for (const x of queue) { if (x.t0 <= audio.currentTime + .15) it = x; else break; }
+    if (it !== lastItem) { clearMarks(); it.el.classList.add("cur"); lastItem = it; if (playing) follow(it.el); }
+    highlightBox(it.which); where = it.where + " · ";
+    setStatus(it.label, `${where}${fmt(audio.currentTime)} / ${fmt(audio.duration)}`, p * 100);
+    return;
+  }
   highlightBox(ot ? "ot" : "nt");
   setStatus(ot ? entry[1][0] : entry[2][0], `${fmt(audio.currentTime)} / ${fmt(audio.duration)}`, p * 100);
 });
@@ -555,18 +657,13 @@ function stopAll(reset) {
   playing = false; loading = false;
   try { speechSynthesis.cancel(); } catch {}
   clearInterval(tick);
+  keep.pause();
   audio.pause();
   releaseWake();
-  if (reset) { audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
+  if (reset) { segDur = null; pendingSeek = -1; probing = ""; audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
   setButton();
 }
-function prime() {
-  if (primed || !("speechSynthesis" in window)) return;
-  primed = true;
-  try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } catch {}
-}
 $("play").addEventListener("click", () => {
-  if (settings.tr !== "esv") prime();
   if (loading) return;
   showMsg("");
   if (playing) { stopAll(false); return; }   // pause; KJV/WEB resumes at the current verse
@@ -587,6 +684,10 @@ document.querySelectorAll('input[name="sp"]').forEach(r => r.addEventListener("c
 document.querySelectorAll('input[name="sz"]').forEach(r => r.addEventListener("change", () => {
   settings.size = parseInt(r.value, 10); store.set("size", settings.size); renderSettings();
 }));
+$("esvKey").addEventListener("change", e => {
+  settings.key = e.target.value.trim(); store.set("esvKey", settings.key); esvDay = null;
+  if (settings.tr === "esv") loadText();
+});
 $("voice").addEventListener("change", e => { settings.voice = e.target.value; store.set("voice", settings.voice); });
 
 function fillVoices() {
