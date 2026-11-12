@@ -219,6 +219,13 @@ select, input[type="text"] {
         <input type="text" id="esvKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your key from api.esv.org">
         <p class="hint">Needed to show ESV text. It is saved on this phone only.</p>
       </div>
+      <div class="field" id="narrField">
+        <span class="label" id="naLabel">Narrator</span>
+        <div class="seg" role="radiogroup" aria-labelledby="naLabel">
+          <label><input type="radio" name="na" id="na-rec" value="rec"><span>Recorded</span></label>
+          <label><input type="radio" name="na" id="na-phone" value="phone"><span>Phone voice</span></label>
+        </div>
+      </div>
       <div class="field" id="voiceField">
         <label class="label" for="voice">Voice</label>
         <select id="voice"></select>
@@ -247,7 +254,7 @@ select, input[type="text"] {
   </details>
 
   <article class="text" id="text" aria-live="off"></article>
-  <p class="version">Version 7</p>
+  <p class="version">Version 8</p>
 </main>
 
 <div class="player">
@@ -276,7 +283,8 @@ const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>';
 const TR_HINT = {
   esv: "Professional narration from Crossway. Keeps playing with the screen locked. The highlight follows verse by verse.",
-  kjv: "King James Version, read by your phone's voice with the text highlighted as it goes. Phone voices are muted by the silent switch, so turn silent mode off.",
+  kjv: "King James Version, read by your phone's voice with the text highlighted word by word. Phone voices are muted by the silent switch, so turn silent mode off.",
+  kjvRec: "King James Version, read by a recorded narrator. Works in silent mode and with the screen locked. The highlight follows verse by verse.",
   web: "World English Bible (modern English), read by your phone's voice with the text highlighted as it goes. Phone voices are muted by the silent switch, so turn silent mode off."
 };
 
@@ -286,11 +294,14 @@ const store = {
   set(k, v) { try { localStorage.setItem("db." + k, JSON.stringify(v)); } catch {} }
 };
 
-let settings = { tr: store.get("tr", "kjv"), voice: store.get("voice", ""), rate: store.get("rate", 1), size: store.get("size", 19), key: store.get("esvKey", "") };
+let settings = { tr: store.get("tr", "kjv"), voice: store.get("voice", ""), rate: store.get("rate", 1), size: store.get("size", 19), key: store.get("esvKey", ""), narr: store.get("narr", "rec") };
 let current = new Date();
 let entry, playing = false, loading = false;
 let queue = [], qi = 0, utter = null, wakeLock = null, runId = 0, loadId = 0, queuePromise = null;
 let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, tick = 0, cps = 15, heard = false, warned = false, forceVoice = false, segDur = null, pendingSeek = -1, probing = "";
+let segMeta = [], ri = 0, recBase = 0, recFailed = false, recLoaded = false, recSeekItem = null;
+const REC_BASES = ["https://www.wordproject.org/bibles/app/audio/1/", "https://kjv.wordfree.net/bibles/app/audio/1/"];
+const recorded = () => settings.tr === "kjv" && settings.narr === "rec" && !recFailed;
 const audio = $("audio");
 
 function keyFor(d) {
@@ -324,8 +335,10 @@ function renderSettings() {
   $(sp).checked = true;
   $({ 17: "sz-s", 19: "sz-m", 22: "sz-l" }[settings.size] || "sz-m").checked = true;
   document.documentElement.style.setProperty("--text-size", settings.size + "px");
-  $("trHint").textContent = TR_HINT[settings.tr];
-  $("voiceField").hidden = settings.tr === "esv";
+  $("trHint").textContent = TR_HINT[recorded() ? "kjvRec" : settings.tr];
+  $("voiceField").hidden = settings.tr === "esv" || recorded();
+  $("narrField").hidden = settings.tr !== "kjv";
+  $(settings.narr === "phone" || recFailed ? "na-phone" : "na-rec").checked = true;
   $("keyField").hidden = settings.tr !== "esv";
   if (document.activeElement !== $("esvKey")) $("esvKey").value = settings.key;
   $("settingsSummary").textContent = settings.tr.toUpperCase() + (settings.rate !== 1 ? ` · ${settings.rate}×` : "");
@@ -427,7 +440,7 @@ const spokenHeading = (b, c, f) => (b === 18 ? `Psalm ${c}.` : `${SPOKEN[b]}, ch
 
 // Build the queue of things to read and the matching page elements, so the highlight can follow.
 async function buildQueue(tr) {
-  const q = []; let segIndex = 0;
+  const q = [], metas = []; let segIndex = 0;
   const frag = document.createDocumentFragment();
   for (const [which, part, label] of [["ot", entry[1], "Old Testament"], ["nt", entry[2], "New Testament"]]) {
     const h2 = document.createElement("h2"); h2.textContent = `${label} · ${part[0]}`; frag.append(h2);
@@ -442,9 +455,16 @@ async function buildQueue(tr) {
         q.push({ which, label: part[0], text: "", el: h, words: [], where: headingText(b, c), si, wt: (t - f + 1) * 125 });
         continue;
       }
+      let off = 0, meta = null;
+      if (tr !== "esv") {
+        const w = v => v[1].length + 10, pre = verses.filter(v => v[0] < f).reduce((a, v) => a + w(v), 0) + 18;
+        meta = metas[si] = { b, c, f, t, pre, tot: verses.reduce((a, v) => a + w(v), 0) + 18, last: verses[verses.length - 1][0] };
+        off = f > 1 ? pre : 0;
+      }
       const h3 = document.createElement("h3"); h3.textContent = headingText(b, c) + (f > 1 || (tr !== "esv" && t < verses.length) ? `:${f}–${t}` : "");
       frag.append(h3);
-      q.push({ which, label: part[0], text: spokenHeading(b, c, f), el: h3, words: [], where: headingText(b, c), si, wt: 18 });
+      q.push({ which, label: part[0], text: spokenHeading(b, c, f), el: h3, words: [], where: headingText(b, c), si, wt: 18, off });
+      if (f === 1) off += 18;
       for (const [v, text] of verses) {
         if (v < f || v > t || !text) continue;
         const p = document.createElement("p"); p.className = "v"; p.dataset.i = q.length;
@@ -456,16 +476,18 @@ async function buildQueue(tr) {
           else { const s = document.createElement("span"); s.className = "w"; s.textContent = tok; p.append(s); words.push({ start: pos, end: pos + tok.length, el: s }); }
           pos += tok.length;
         }
-        q.push({ which, label: part[0], text, el: p, words, where: `${headingText(b, c)}:${v}`, si, wt: text.length + 10 });
+        q.push({ which, label: part[0], text, el: p, words, where: `${headingText(b, c)}:${v}`, si, wt: text.length + 10, off });
+        off += text.length + 10;
         frag.append(p);
       }
+      if (meta) meta.endOff = off;
     }
   }
   const foot = document.createElement("p"); foot.className = "text-foot";
   if (tr === "esv") foot.innerHTML = 'ESV · Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible. <a href="https://www.esv.org" target="_blank" rel="noopener">www.esv.org</a>';
   else foot.textContent = tr === "kjv" ? "King James Version · public domain" : "World English Bible · public domain";
   frag.append(foot);
-  return { q, frag };
+  return { q, frag, metas };
 }
 function loadText() {
   const id = ++loadId;
@@ -477,10 +499,10 @@ function loadText() {
   }
   art.innerHTML = '<p class="note">Loading the text…</p>';
   const tr = settings.tr;
-  queuePromise = buildQueue(tr).then(({ q, frag }) => {
+  queuePromise = buildQueue(tr).then(({ q, frag, metas }) => {
     if (id !== loadId) return null;
     art.replaceChildren(frag);
-    queue = q; qi = 0;
+    queue = q; qi = 0; segMeta = metas; ri = 0; recLoaded = false;
     if (tr === "esv") buildTimeline();
     return q;
   }).catch(e => {
@@ -609,6 +631,12 @@ $("text").addEventListener("click", e => {
     else { pendingSeek = i; if (!playing) playEsv(); }
     return;
   }
+  if (recorded()) {
+    const it = queue[i]; lastUserScroll = 0;
+    if (it.si === ri && recLoaded && segMeta[ri].timed) { audio.currentTime = it.t0; if (!playing) recWatch(audio.play()); }
+    else recWatch(recLoad(it.si, it));
+    return;
+  }
   qi = i;
   clearMarks(); p.classList.add("cur"); lastItem = queue[qi];
   if (playing) startSpeaking(++runId);
@@ -677,6 +705,7 @@ function probeDurations(url) {
 audio.addEventListener("loadedmetadata", buildTimeline);
 audio.addEventListener("durationchange", buildTimeline);
 audio.addEventListener("timeupdate", () => {
+  if (audio.dataset.url === "rec") { recTick(); return; }
   if (!audio.duration || settings.tr !== "esv") return;
   const p = audio.currentTime / audio.duration, ot = p < otShare();
   let where = "";
@@ -691,12 +720,79 @@ audio.addEventListener("timeupdate", () => {
   highlightBox(ot ? "ot" : "nt");
   setStatus(ot ? entry[1][0] : entry[2][0], `${fmt(audio.currentTime)} / ${fmt(audio.duration)}`, p * 100);
 });
-audio.addEventListener("ended", () => { playing = false; setButton(); markDone(); });
+audio.addEventListener("ended", () => {
+  if (audio.dataset.url === "rec") { recNext(); return; }
+  playing = false; setButton(); markDone();
+});
 audio.addEventListener("error", () => {
+  if (audio.dataset.url === "rec") { recError(); return; }
   if (!audio.dataset.url) return;
   playing = false; loading = false; setButton();
   showMsg("The ESV audio didn't load. Check your connection, or switch to KJV in Settings.");
 });
+
+/* ---------- KJV: recorded narration, one recording per chapter ---------- */
+function recLoad(i, item) {
+  ri = i; recSeekItem = item || null; recLoaded = true;
+  const m = segMeta[i]; m.timed = false;
+  audio.dataset.url = "rec";
+  audio.src = REC_BASES[recBase] + (m.b + 1) + "/" + m.c + ".mp3";
+  audio.playbackRate = settings.rate;
+  return audio.play();
+}
+function recWatch(p) {
+  loading = !playing; setButton();
+  p.then(() => {
+    loading = false; playing = true; setButton();
+    if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: `${entry[1][0]} · ${entry[2][0]}`, artist: `KJV · Day ${entry[0]}`, album: "Daily Bible" });
+  }).catch(() => { loading = false; setButton(); });
+}
+function playRec() {
+  if (!queue.length) { showMsg("The text is still loading. Tap play again in a moment."); return; }
+  lastUserScroll = 0;
+  recWatch(recLoaded && audio.getAttribute("src") ? audio.play() : recLoad(ri));
+}
+// Each chapter recording has no verse timings, so share its length out by verse length
+function recTimes() {
+  const m = segMeta[ri], d = audio.duration; if (!m || !d || !isFinite(d)) return;
+  for (const it of queue) if (it.si === ri) it.t0 = d * it.off / m.tot;
+  m.start = m.f > 1 ? Math.max(0, d * m.pre / m.tot - 1) : 0;           // readings that start mid-chapter
+  m.end = m.t < m.last ? Math.min(d, d * m.endOff / m.tot + 1.5) : d + 1;  // readings that stop mid-chapter
+  const target = recSeekItem ? recSeekItem.t0 : m.start; recSeekItem = null;
+  if (!m.timed && target > .3) audio.currentTime = target;
+  m.timed = true; audio.playbackRate = settings.rate;
+}
+function recNext() {
+  if (ri + 1 < segMeta.length) { recWatch(recLoad(ri + 1)); return; }
+  playing = false; recLoaded = false; ri = 0; audio.pause(); setButton(); markDone();
+}
+function recTick() {
+  const m = segMeta[ri]; if (!m || !m.timed) return;
+  const ct = audio.currentTime, d = audio.duration;
+  if (ct >= m.end) { recNext(); return; }
+  let it = null;
+  for (const x of queue) { if (x.si !== ri) continue; if (it === null || x.t0 <= ct + .15) it = x; else break; }
+  if (!it) return;
+  if (it !== lastItem) { clearMarks(); it.el.classList.add("cur"); lastItem = it; if (playing) follow(it.el); }
+  highlightBox(it.which);
+  const frac = Math.min(1, Math.max(0, (ct - m.start) / Math.max(1, Math.min(m.end, d) - m.start)));
+  const pct = (ri + frac) / segMeta.length * 100;
+  setStatus(it.label, `${it.where} · ${Math.round(pct)}%`, pct);
+}
+function recError() {
+  if (recBase + 1 < REC_BASES.length) {          // try the recording's second address
+    recBase++; const wasPlaying = playing || loading;
+    if (wasPlaying) recWatch(recLoad(ri, recSeekItem)); else recLoaded = false;
+    return;
+  }
+  recFailed = true; playing = false; loading = false; recLoaded = false;
+  audio.removeAttribute("src"); delete audio.dataset.url;
+  setButton(); renderSettings();
+  showMsg("The recorded KJV narration couldn't be reached, so KJV will use your phone's voice. Tap play to start.");
+}
+audio.addEventListener("loadedmetadata", () => { if (audio.dataset.url === "rec") recTimes(); });
+audio.addEventListener("durationchange", () => { if (audio.dataset.url === "rec") recTimes(); });
+audio.addEventListener("playing", () => { audio.playbackRate = settings.rate; });
 
 /* ---------- controls ---------- */
 function stopAll(reset) {
@@ -706,14 +802,14 @@ function stopAll(reset) {
   clearInterval(tick);
   audio.pause();
   releaseWake();
-  if (reset) { segDur = null; pendingSeek = -1; probing = ""; audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
+  if (reset) { recLoaded = false; ri = 0; segDur = null; pendingSeek = -1; probing = ""; audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
   setButton();
 }
 $("play").addEventListener("click", () => {
   if (loading) return;
   showMsg("");
   if (playing) { stopAll(false); return; }   // pause; KJV/WEB resumes at the current verse
-  settings.tr === "esv" ? playEsv() : playSpeech();
+  settings.tr === "esv" ? playEsv() : recorded() ? playRec() : playSpeech();
 });
 function goTo(d) { stopAll(true); current = d; render(); scrollTo(0, 0); }
 $("prev").addEventListener("click", () => { manualDay = true; const d = new Date(current); d.setDate(d.getDate() - 1); goTo(d); });
@@ -729,6 +825,11 @@ document.querySelectorAll('input[name="sp"]').forEach(r => r.addEventListener("c
 }));
 document.querySelectorAll('input[name="sz"]').forEach(r => r.addEventListener("change", () => {
   settings.size = parseInt(r.value, 10); store.set("size", settings.size); renderSettings();
+}));
+document.querySelectorAll('input[name="na"]').forEach(r => r.addEventListener("change", () => {
+  settings.narr = r.value; store.set("narr", r.value);
+  if (r.value === "rec") { recFailed = false; recBase = 0; }
+  stopAll(true); render(); renderSettings();
 }));
 $("esvKey").addEventListener("change", e => {
   settings.key = e.target.value.trim(); store.set("esvKey", settings.key); esvDay = null;
