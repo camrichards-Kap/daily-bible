@@ -210,7 +210,7 @@ select, input[type="text"] {
         <div class="seg" role="radiogroup" aria-labelledby="trLabel">
           <label><input type="radio" name="tr" id="tr-esv" value="esv"><span>ESV</span></label>
           <label><input type="radio" name="tr" id="tr-kjv" value="kjv"><span>KJV</span></label>
-          <label><input type="radio" name="tr" id="tr-web" value="web"><span>WEB</span></label>
+          <label><input type="radio" name="tr" id="tr-bsb" value="bsb"><span>BSB</span></label>
         </div>
         <p class="hint" id="trHint"></p>
       </div>
@@ -222,15 +222,11 @@ select, input[type="text"] {
       <div class="field" id="narrField">
         <span class="label" id="naLabel">Narrator</span>
         <div class="seg" role="radiogroup" aria-labelledby="naLabel">
-          <label><input type="radio" name="na" id="na-rec" value="rec"><span>Recorded</span></label>
-          <label><input type="radio" name="na" id="na-phone" value="phone"><span>Phone voice</span></label>
+          <label><input type="radio" name="na" id="na-souer" value="souer"><span>Souer</span></label>
+          <label><input type="radio" name="na" id="na-hays" value="hays"><span>Hays</span></label>
+          <label><input type="radio" name="na" id="na-gilbert" value="gilbert"><span>Gilbert</span></label>
         </div>
-      </div>
-      <div class="field" id="voiceField">
-        <label class="label" for="voice">Voice</label>
-        <select id="voice"></select>
-        <button type="button" class="test-btn" id="testVoice">Test voice</button>
-        <p class="hint" id="testOut" hidden></p>
+        <p class="hint" id="naHint"></p>
       </div>
       <div class="field">
         <span class="label" id="spLabel">Speed</span>
@@ -254,7 +250,7 @@ select, input[type="text"] {
   </details>
 
   <article class="text" id="text" aria-live="off"></article>
-  <p class="version">Version 8</p>
+  <p class="version">Version 9</p>
 </main>
 
 <div class="player">
@@ -282,11 +278,17 @@ const BOOK_CH = [50,40,27,36,34,24,21,4,31,24,22,25,29,36,10,13,10,42,150,31,12,
 const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.52.85l10.4-6.5a1 1 0 0 0 0-1.7L9.52 4.65A1 1 0 0 0 8 5.5z"/></svg>';
 const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>';
 const TR_HINT = {
-  esv: "Professional narration from Crossway. Keeps playing with the screen locked. The highlight follows verse by verse.",
-  kjv: "King James Version, read by your phone's voice with the text highlighted word by word. Phone voices are muted by the silent switch, so turn silent mode off.",
-  kjvRec: "King James Version, read by a recorded narrator. Works in silent mode and with the screen locked. The highlight follows verse by verse.",
-  web: "World English Bible (modern English), read by your phone's voice with the text highlighted as it goes. Phone voices are muted by the silent switch, so turn silent mode off."
+  esv: "English Standard Version. Professional narration from Crossway. The highlight follows verse by verse.",
+  kjv: "King James Version, read by a recorded narrator. The highlight follows verse by verse.",
+  bsb: "Berean Standard Bible, a modern public-domain translation, read by professional narrators."
 };
+const NA_HINT = {
+  souer: "Bob Souer. The highlight follows the words, using exact timings for every verse.",
+  hays: "Barry Hays. The highlight follows verse by verse.",
+  gilbert: "Jordan Gilbert. The highlight follows verse by verse."
+};
+const BSB_PREFIX = ["BSB_01_Gen","BSB_02_Exo","BSB_03_Lev","BSB_04_Num","BSB_05_Deu","BSB_06_Jos","BSB_07_Jdg","BSB_08_Rut","BSB_09_1Sa","BSB_10_2Sa","BSB_11_1Ki","BSB_12_2Ki","BSB_13_1Ch","BSB_14_2Ch","BSB_15_Ezr","BSB_16_Neh","BSB_17_Est","BSB_18_Job","BSB_19_Psa","BSB_20_Pro","BSB_21_Ecc","BSB_22_Sng","BSB_23_Isa","BSB_24_Jer","BSB_25_Lam","BSB_26_Ezk","BSB_27_Dan","BSB_28_Hos","BSB_29_Jol","BSB_30_Amo","BSB_31_Oba","BSB_32_Jon","BSB_33_Mic","BSB_34_Nam","BSB_35_Hab","BSB_36_Zep","BSB_37_Hag","BSB_38_Zec","BSB_39_Mal","BSB_40_Mat","BSB_41_Mrk","BSB_42_Luk","BSB_43_Jhn","BSB_44_Act","BSB_45_Rom","BSB_46_1Co","BSB_47_2Co","BSB_48_Gal","BSB_49_Eph","BSB_50_Php","BSB_51_Col","BSB_52_1Th","BSB_53_2Th","BSB_54_1Ti","BSB_55_2Ti","BSB_56_Tts","BSB_57_Phm","BSB_58_Heb","BSB_59_Jas","BSB_60_1Pe","BSB_61_2Pe","BSB_62_1Jn","BSB_63_2Jn","BSB_64_3Jn","BSB_65_Jud","BSB_66_Rev"];
+const BSB_SUFFIX = { souer: "", hays: "_H", gilbert: "_G" };
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -294,14 +296,15 @@ const store = {
   set(k, v) { try { localStorage.setItem("db." + k, JSON.stringify(v)); } catch {} }
 };
 
-let settings = { tr: store.get("tr", "kjv"), voice: store.get("voice", ""), rate: store.get("rate", 1), size: store.get("size", 19), key: store.get("esvKey", ""), narr: store.get("narr", "rec") };
+let settings = { tr: store.get("tr", "esv"), rate: store.get("rate", 1), size: store.get("size", 19), key: store.get("esvKey", ""), narr: store.get("bsbNarr", "souer") };
+if (!TR_HINT[settings.tr]) settings.tr = "bsb";            // an earlier version offered WEB
+if (!NA_HINT[settings.narr]) settings.narr = "souer";
 let current = new Date();
 let entry, playing = false, loading = false;
-let queue = [], qi = 0, utter = null, wakeLock = null, runId = 0, loadId = 0, queuePromise = null;
-let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, tick = 0, cps = 15, heard = false, warned = false, forceVoice = false, segDur = null, pendingSeek = -1, probing = "";
-let segMeta = [], ri = 0, recBase = 0, recFailed = false, recLoaded = false, recSeekItem = null;
-const REC_BASES = ["https://www.wordproject.org/bibles/app/audio/1/", "https://kjv.wordfree.net/bibles/app/audio/1/"];
-const recorded = () => settings.tr === "kjv" && settings.narr === "rec" && !recFailed;
+let queue = [], loadId = 0, queuePromise = null;
+let lastWord = null, lastItem = null, lastUserScroll = 0, manualDay = false, segDur = null, pendingSeek = -1, probing = "";
+let segMeta = [], ri = 0, recBase = 0, recNarr = "", recLoaded = false, recSeekItem = null;
+const KJV_BASES = ["https://www.wordproject.org/bibles/app/audio/1/", "https://kjv.wordfree.net/bibles/app/audio/1/"];
 const audio = $("audio");
 
 function keyFor(d) {
@@ -335,10 +338,10 @@ function renderSettings() {
   $(sp).checked = true;
   $({ 17: "sz-s", 19: "sz-m", 22: "sz-l" }[settings.size] || "sz-m").checked = true;
   document.documentElement.style.setProperty("--text-size", settings.size + "px");
-  $("trHint").textContent = TR_HINT[recorded() ? "kjvRec" : settings.tr];
-  $("voiceField").hidden = settings.tr === "esv" || recorded();
-  $("narrField").hidden = settings.tr !== "kjv";
-  $(settings.narr === "phone" || recFailed ? "na-phone" : "na-rec").checked = true;
+  $("trHint").textContent = TR_HINT[settings.tr];
+  $("narrField").hidden = settings.tr !== "bsb";
+  $("na-" + settings.narr).checked = true;
+  $("naHint").textContent = NA_HINT[settings.narr];
   $("keyField").hidden = settings.tr !== "esv";
   if (document.activeElement !== $("esvKey")) $("esvKey").value = settings.key;
   $("settingsSummary").textContent = settings.tr.toUpperCase() + (settings.rate !== 1 ? ` · ${settings.rate}×` : "");
@@ -373,6 +376,11 @@ async function fetchBook(tr, b) {
   if (!bookCache[k]) bookCache[k] = fetch(`text/${tr}/${b}.json`).then(r => { if (!r.ok) throw new Error("missing"); return r.json(); })
     .catch(e => { delete bookCache[k]; throw e; });
   return bookCache[k];
+}
+const timeCache = {};
+function fetchTiming(b) {
+  if (!timeCache[b]) timeCache[b] = fetch(`timing/${b}.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+  return timeCache[b];
 }
 async function fetchChapter(tr, b, c) {
   try { return (await fetchBook(tr, b))[c - 1]; } catch {}
@@ -459,6 +467,7 @@ async function buildQueue(tr) {
       if (tr !== "esv") {
         const w = v => v[1].length + 10, pre = verses.filter(v => v[0] < f).reduce((a, v) => a + w(v), 0) + 18;
         meta = metas[si] = { b, c, f, t, pre, tot: verses.reduce((a, v) => a + w(v), 0) + 18, last: verses[verses.length - 1][0] };
+        if (tr === "bsb") { const tm = await fetchTiming(b); meta.ts = tm && tm[c - 1] ? Object.fromEntries(verses.map((v, k) => [v[0], tm[c - 1][k]])) : null; }
         off = f > 1 ? pre : 0;
       }
       const h3 = document.createElement("h3"); h3.textContent = headingText(b, c) + (f > 1 || (tr !== "esv" && t < verses.length) ? `:${f}–${t}` : "");
@@ -476,7 +485,7 @@ async function buildQueue(tr) {
           else { const s = document.createElement("span"); s.className = "w"; s.textContent = tok; p.append(s); words.push({ start: pos, end: pos + tok.length, el: s }); }
           pos += tok.length;
         }
-        q.push({ which, label: part[0], text, el: p, words, where: `${headingText(b, c)}:${v}`, si, wt: text.length + 10, off });
+        q.push({ which, label: part[0], text, el: p, words, where: `${headingText(b, c)}:${v}`, si, wt: text.length + 10, off, v });
         off += text.length + 10;
         frag.append(p);
       }
@@ -485,14 +494,14 @@ async function buildQueue(tr) {
   }
   const foot = document.createElement("p"); foot.className = "text-foot";
   if (tr === "esv") foot.innerHTML = 'ESV · Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible. <a href="https://www.esv.org" target="_blank" rel="noopener">www.esv.org</a>';
-  else foot.textContent = tr === "kjv" ? "King James Version · public domain" : "World English Bible · public domain";
+  else foot.textContent = tr === "kjv" ? "King James Version · public domain" : "Berean Standard Bible · public domain";
   frag.append(foot);
   return { q, frag, metas };
 }
 function loadText() {
   const id = ++loadId;
   const art = $("text");
-  queue = []; qi = 0; queuePromise = null; lastWord = lastItem = null;
+  queue = []; queuePromise = null; lastWord = lastItem = null;
   if (settings.tr === "esv" && !settings.key.trim()) {
     art.innerHTML = '<div class="note"><strong>The ESV audio is ready. Tap play.</strong> To also read along in ESV, add a free key from Crossway:<ol><li>Go to <a href="https://api.esv.org/account/create-application/" target="_blank" rel="noopener">api.esv.org</a> and create a free account.</li><li>Create an API application. Personal, non-commercial use is free.</li><li>Copy the key it gives you.</li><li>Open Settings here and paste it under ESV text key.</li></ol></div>';
     return;
@@ -502,7 +511,7 @@ function loadText() {
   queuePromise = buildQueue(tr).then(({ q, frag, metas }) => {
     if (id !== loadId) return null;
     art.replaceChildren(frag);
-    queue = q; qi = 0; segMeta = metas; ri = 0; recLoaded = false;
+    queue = q; segMeta = metas; ri = 0; recLoaded = false;
     if (tr === "esv") buildTimeline();
     return q;
   }).catch(e => {
@@ -531,116 +540,17 @@ function follow(el) {
 }
 ["touchmove", "wheel"].forEach(ev => addEventListener(ev, () => lastUserScroll = Date.now(), { passive: true }));
 
-/* ---------- KJV / WEB: phone voice ---------- */
-function pickVoice() {
-  const vs = speechSynthesis.getVoices();
-  if (settings.voice) return vs.find(v => v.voiceURI === settings.voice) || null;
-  if (!forceVoice) return null;                       // "Phone default" leaves the choice to the phone
-  const en = vs.filter(v => v.lang && v.lang.replace("_", "-").startsWith("en"));
-  return en.find(v => /samantha/i.test(v.name)) || en.find(v => v.lang.replace("_", "-") === "en-US") || en[0] || null;
-}
-function speakNext(id) {
-  if (id !== runId || !playing) return;
-  if (qi >= queue.length) { playing = false; setButton(); releaseWake(); markDone(); qi = 0; return; }
-  const item = queue[qi];
-  clearMarks();
-  item.el.classList.add("cur"); lastItem = item;
-  follow(item.el);
-  highlightBox(item.which);
-  setStatus(item.label, `${item.where} · ${Math.round(qi / queue.length * 100)}%`, qi / queue.length * 100);
-  utter = new SpeechSynthesisUtterance(item.text);
-  const v = pickVoice(); if (v) { utter.voice = v; utter.lang = v.lang; } else utter.lang = "en-US";
-  utter.rate = settings.rate;
-  const mark = charIndex => {
-    let w = null;
-    for (const x of item.words) { if (x.start <= charIndex) w = x; else break; }
-    if (!w || w === lastWord) return;
-    if (lastWord) lastWord.el.classList.remove("on");
-    w.el.classList.add("on"); lastWord = w;
-    follow(w.el);
-  };
-  let started = 0, sawBoundary = false;
-  clearInterval(tick);
-  utter.onstart = () => { started = performance.now(); heard = true; };
-  utter.onboundary = e => {
-    if (id !== runId || (e.name && e.name !== "word") || !item.words.length) return;
-    sawBoundary = true; heard = true; mark(e.charIndex);
-  };
-  if (item.words.length) tick = setInterval(() => {
-    if (id !== runId || !playing) { clearInterval(tick); return; }
-    if (sawBoundary) return;                       // the voice is telling us where it is
-    if (!started) started = performance.now();     // some phones never send a start event
-    mark((performance.now() - started) / 1000 * cps * settings.rate);
-  }, 90);
-  utter.onend = () => {
-    clearInterval(tick); heard = true;
-    if (started && item.text.length > 40) {         // learn this voice's real pace for the estimate
-      const secs = (performance.now() - started) / 1000;
-      if (secs > 1) cps = Math.min(24, Math.max(8, cps * .6 + (item.text.length / secs / settings.rate) * .4));
-    }
-    if (id === runId && playing) { qi++; speakNext(id); }
-  };
-  utter.onerror = e => {
-    clearInterval(tick);
-    if (id !== runId || !playing || e.error === "interrupted" || e.error === "canceled") return;
-    if (!heard) { stopAll(false); showMsg(`This phone refused to speak (reason: ${e.error || "unknown"}). Open Settings and tap Test voice, or switch to ESV.`); return; }
-    qi++; speakNext(id);
-  };
-  speechSynthesis.speak(utter);
-}
-async function playSpeech() {
-  if (!("speechSynthesis" in window)) { showMsg("This browser can't read aloud. Switch to ESV in Settings."); return; }
-  const id = ++runId;
-  if (!queue.length) {
-    if (!queuePromise) loadText();
-    loading = true; setButton(); setStatus("Loading text…", "", null);
-    await queuePromise;
-    loading = false; setButton();
-    if (id !== runId) return;
-    if (!queue.length) { idleStatus(); showMsg("Couldn't load the text. Check your connection and tap play again."); return; }
-  }
-  lastUserScroll = 0;
-  playing = true; setButton(); requestWake();
-  startSpeaking(id);
-}
-function startSpeaking(id) {
-  heard = false;
-  setTimeout(() => {
-    if (id !== runId || !playing || heard) return;
-    if (!forceVoice && !settings.voice) {              // the phone accepted the request but never started: try a named voice
-      forceVoice = true;
-      try { speechSynthesis.cancel(); } catch {}
-      setTimeout(() => { if (id === runId && playing) speakNext(id); }, 150);
-      setTimeout(() => { if (id === runId && playing && !heard) showMsg("This phone isn't starting its voice here. Open Settings and tap Test voice to see why."); }, 3500);
-    } else showMsg("This phone isn't starting its voice here. Open Settings and tap Test voice to see why.");
-  }, 2500);
-  if (speechSynthesis.speaking || speechSynthesis.pending) {
-    speechSynthesis.cancel();
-    setTimeout(() => speakNext(id), 120);              // iPhone drops speech that starts in the same instant as a cancel
-  } else speakNext(id);                                 // start right inside the tap, which iPhone requires
-}
-async function requestWake() { try { wakeLock = await navigator.wakeLock?.request("screen"); } catch {} }
-function releaseWake() { try { wakeLock?.release(); } catch {} wakeLock = null; }
-
-// Tap a verse to read from there
+// Tap a verse to hear from there
 $("text").addEventListener("click", e => {
   const p = e.target.closest(".v"); if (!p || !queue.length) return;
-  const i = +p.dataset.i;
+  const i = +p.dataset.i, it = queue[i]; lastUserScroll = 0; showMsg("");
   if (settings.tr === "esv") {
-    if (audio.duration && queue[i].t0 != null) { audio.currentTime = queue[i].t0; if (!playing) playEsv(); }
+    if (audio.duration && it.t0 != null) { audio.currentTime = it.t0; if (!playing) playEsv(); }
     else { pendingSeek = i; if (!playing) playEsv(); }
     return;
   }
-  if (recorded()) {
-    const it = queue[i]; lastUserScroll = 0;
-    if (it.si === ri && recLoaded && segMeta[ri].timed) { audio.currentTime = it.t0; if (!playing) recWatch(audio.play()); }
-    else recWatch(recLoad(it.si, it));
-    return;
-  }
-  qi = i;
-  clearMarks(); p.classList.add("cur"); lastItem = queue[qi];
-  if (playing) startSpeaking(++runId);
-  else playSpeech();
+  if (it.si === ri && recLoaded && segMeta[ri].timed) { audio.currentTime = it.t0; if (!playing) recWatch(audio.play()); }
+  else recWatch(recLoad(it.si, it));
 });
 
 /* ---------- ESV: Crossway audio ---------- */
@@ -731,12 +641,17 @@ audio.addEventListener("error", () => {
   showMsg("The ESV audio didn't load. Check your connection, or switch to KJV in Settings.");
 });
 
-/* ---------- KJV: recorded narration, one recording per chapter ---------- */
+/* ---------- KJV and BSB: recorded narration, one recording per chapter ---------- */
+function recUrl(m) {
+  if (settings.tr === "kjv") return KJV_BASES[recBase] + (m.b + 1) + "/" + m.c + ".mp3";
+  const n = recNarr || settings.narr;
+  return `https://openbible.com/audio/${n}/${BSB_PREFIX[m.b]}_${String(m.c).padStart(3, "0")}${BSB_SUFFIX[n]}.mp3`;
+}
 function recLoad(i, item) {
   ri = i; recSeekItem = item || null; recLoaded = true;
   const m = segMeta[i]; m.timed = false;
   audio.dataset.url = "rec";
-  audio.src = REC_BASES[recBase] + (m.b + 1) + "/" + m.c + ".mp3";
+  audio.src = recUrl(m);
   audio.playbackRate = settings.rate;
   return audio.play();
 }
@@ -744,7 +659,7 @@ function recWatch(p) {
   loading = !playing; setButton();
   p.then(() => {
     loading = false; playing = true; setButton();
-    if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: `${entry[1][0]} · ${entry[2][0]}`, artist: `KJV · Day ${entry[0]}`, album: "Daily Bible" });
+    if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: `${entry[1][0]} · ${entry[2][0]}`, artist: `${settings.tr.toUpperCase()} · Day ${entry[0]}`, album: "Daily Bible" });
   }).catch(() => { loading = false; setButton(); });
 }
 function playRec() {
@@ -752,12 +667,25 @@ function playRec() {
   lastUserScroll = 0;
   recWatch(recLoaded && audio.getAttribute("src") ? audio.play() : recLoad(ri));
 }
-// Each chapter recording has no verse timings, so share its length out by verse length
+// Work out when each verse starts in this chapter's recording: exact timings where we have them
+// (BSB read by Souer), otherwise the chapter's length shared out by verse length.
 function recTimes() {
   const m = segMeta[ri], d = audio.duration; if (!m || !d || !isFinite(d)) return;
-  for (const it of queue) if (it.si === ri) it.t0 = d * it.off / m.tot;
-  m.start = m.f > 1 ? Math.max(0, d * m.pre / m.tot - 1) : 0;           // readings that start mid-chapter
-  m.end = m.t < m.last ? Math.min(d, d * m.endOff / m.tot + 1.5) : d + 1;  // readings that stop mid-chapter
+  const exact = settings.tr === "bsb" && (recNarr || settings.narr) === "souer" && m.ts;
+  for (const it of queue) {
+    if (it.si !== ri) continue;
+    const ts = exact && it.v ? m.ts[it.v] : null;
+    if (ts) { it.t0 = ts[0]; it.t1 = ts[1]; }
+    else if (exact) { it.t0 = m.f > 1 && m.ts[m.f] ? m.ts[m.f][0] : 0; it.t1 = null; }     // the chapter heading
+    else { it.t0 = d * it.off / m.tot; it.t1 = null; }
+  }
+  if (exact && m.ts[m.f] && m.ts[m.t]) {
+    m.start = m.f > 1 ? Math.max(0, m.ts[m.f][0] - .25) : 0;
+    m.end = m.t < m.last ? m.ts[m.t][1] + .15 : d + 1;
+  } else {
+    m.start = m.f > 1 ? Math.max(0, d * m.pre / m.tot - 1) : 0;           // readings that start mid-chapter
+    m.end = m.t < m.last ? Math.min(d, d * m.endOff / m.tot + 1.5) : d + 1;  // readings that stop mid-chapter
+  }
   const target = recSeekItem ? recSeekItem.t0 : m.start; recSeekItem = null;
   if (!m.timed && target > .3) audio.currentTime = target;
   m.timed = true; audio.playbackRate = settings.rate;
@@ -771,24 +699,37 @@ function recTick() {
   const ct = audio.currentTime, d = audio.duration;
   if (ct >= m.end) { recNext(); return; }
   let it = null;
-  for (const x of queue) { if (x.si !== ri) continue; if (it === null || x.t0 <= ct + .15) it = x; else break; }
+  for (const x of queue) { if (x.si !== ri) continue; if (it === null || x.t0 <= ct + .1) it = x; else break; }
   if (!it) return;
   if (it !== lastItem) { clearMarks(); it.el.classList.add("cur"); lastItem = it; if (playing) follow(it.el); }
+  if (it.t1 && it.words.length) {                 // exact verse timing: move the word highlight through the verse
+    const at = Math.min(.999, Math.max(0, (ct - it.t0) / Math.max(.2, it.t1 - it.t0))) * it.text.length;
+    let w = it.words[0];
+    for (const x of it.words) { if (x.start <= at) w = x; else break; }
+    if (w !== lastWord) { if (lastWord) lastWord.el.classList.remove("on"); w.el.classList.add("on"); lastWord = w; if (playing) follow(w.el); }
+  }
   highlightBox(it.which);
   const frac = Math.min(1, Math.max(0, (ct - m.start) / Math.max(1, Math.min(m.end, d) - m.start)));
   const pct = (ri + frac) / segMeta.length * 100;
   setStatus(it.label, `${it.where} · ${Math.round(pct)}%`, pct);
 }
 function recError() {
-  if (recBase + 1 < REC_BASES.length) {          // try the recording's second address
-    recBase++; const wasPlaying = playing || loading;
-    if (wasPlaying) recWatch(recLoad(ri, recSeekItem)); else recLoaded = false;
+  const was = playing || loading;
+  if (settings.tr === "kjv" && recBase + 1 < KJV_BASES.length) {              // try the recording's second address
+    recBase++;
+    if (was) recWatch(recLoad(ri, recSeekItem)); else recLoaded = false;
     return;
   }
-  recFailed = true; playing = false; loading = false; recLoaded = false;
+  if (settings.tr === "bsb" && (recNarr || settings.narr) !== "souer") {        // this narrator hasn't recorded this chapter
+    recNarr = "souer";
+    showMsg("This narrator has no recording for this chapter, so Bob Souer is reading today.");
+    if (was) recWatch(recLoad(ri, recSeekItem)); else recLoaded = false;
+    return;
+  }
+  playing = false; loading = false; recLoaded = false;
   audio.removeAttribute("src"); delete audio.dataset.url;
-  setButton(); renderSettings();
-  showMsg("The recorded KJV narration couldn't be reached, so KJV will use your phone's voice. Tap play to start.");
+  setButton();
+  showMsg("The recording couldn't be reached. Check your connection and tap play again, or pick another translation in Settings.");
 }
 audio.addEventListener("loadedmetadata", () => { if (audio.dataset.url === "rec") recTimes(); });
 audio.addEventListener("durationchange", () => { if (audio.dataset.url === "rec") recTimes(); });
@@ -796,20 +737,16 @@ audio.addEventListener("playing", () => { audio.playbackRate = settings.rate; })
 
 /* ---------- controls ---------- */
 function stopAll(reset) {
-  runId++;
   playing = false; loading = false;
-  try { speechSynthesis.cancel(); } catch {}
-  clearInterval(tick);
   audio.pause();
-  releaseWake();
-  if (reset) { recLoaded = false; ri = 0; segDur = null; pendingSeek = -1; probing = ""; audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
+  if (reset) { recLoaded = false; ri = 0; recBase = 0; recNarr = ""; segDur = null; pendingSeek = -1; probing = ""; audio.removeAttribute("src"); delete audio.dataset.url; audio.load(); }
   setButton();
 }
 $("play").addEventListener("click", () => {
   if (loading) return;
   showMsg("");
-  if (playing) { stopAll(false); return; }   // pause; KJV/WEB resumes at the current verse
-  settings.tr === "esv" ? playEsv() : recorded() ? playRec() : playSpeech();
+  if (playing) { stopAll(false); return; }   // pause; play resumes from the same spot
+  settings.tr === "esv" ? playEsv() : playRec();
 });
 function goTo(d) { stopAll(true); current = d; render(); scrollTo(0, 0); }
 $("prev").addEventListener("click", () => { manualDay = true; const d = new Date(current); d.setDate(d.getDate() - 1); goTo(d); });
@@ -827,49 +764,13 @@ document.querySelectorAll('input[name="sz"]').forEach(r => r.addEventListener("c
   settings.size = parseInt(r.value, 10); store.set("size", settings.size); renderSettings();
 }));
 document.querySelectorAll('input[name="na"]').forEach(r => r.addEventListener("change", () => {
-  settings.narr = r.value; store.set("narr", r.value);
-  if (r.value === "rec") { recFailed = false; recBase = 0; }
+  settings.narr = r.value; store.set("bsbNarr", r.value);
   stopAll(true); render(); renderSettings();
 }));
 $("esvKey").addEventListener("change", e => {
   settings.key = e.target.value.trim(); store.set("esvKey", settings.key); esvDay = null;
   if (settings.tr === "esv") loadText();
 });
-// Speaks one sentence and reports exactly what the phone did, so a silent voice can be diagnosed
-$("testVoice").addEventListener("click", () => {
-  const out = $("testOut"); out.hidden = false;
-  if (!("speechSynthesis" in window)) { out.textContent = "Result A: this browser has no voice feature at all."; return; }
-  stopAll(false);
-  const all = speechSynthesis.getVoices(), en = all.filter(v => v.lang && v.lang.replace("_", "-").startsWith("en")).length;
-  let started = false, finished = false, err = "";
-  const u = new SpeechSynthesisUtterance("This is your phone's voice. If you can hear this, it is working.");
-  const v = settings.voice ? all.find(x => x.voiceURI === settings.voice) : null; if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "en-US";
-  u.rate = settings.rate;
-  u.onstart = () => { started = true; show(); }; u.onend = () => { finished = true; show(); }; u.onerror = e => { err = e.error || "unknown"; show(); };
-  window._testU = u;
-  const show = () => {
-    const info = ` (${all.length} voices, ${en} English)`;
-    out.textContent = err ? `Result B: the phone refused to speak. Reason given: ${err}.${info}`
-      : finished ? `Result C: the phone says it spoke the whole sentence. If you heard nothing, the phone is muting it: turn off silent mode and turn the volume up.${info}`
-      : started ? `Speaking now…${info}`
-      : `Result D: the phone accepted the request but never started speaking.${info}`;
-  };
-  out.textContent = "Testing…";
-  speechSynthesis.speak(u);
-  setTimeout(() => { if (!started && !err) show(); }, 3000);
-});
-$("voice").addEventListener("change", e => { settings.voice = e.target.value; store.set("voice", settings.voice); });
-
-function fillVoices() {
-  if (!("speechSynthesis" in window)) return;
-  const vs = speechSynthesis.getVoices().filter(v => v.lang && v.lang.startsWith("en"));
-  const sel = $("voice");
-  sel.innerHTML = '<option value="">Phone default</option>' +
-    vs.map(v => `<option value="${v.voiceURI.replace(/"/g, "&quot;")}">${v.name} (${v.lang})</option>`).join("");
-  sel.value = vs.some(v => v.voiceURI === settings.voice) ? settings.voice : "";
-}
-if ("speechSynthesis" in window) { fillVoices(); speechSynthesis.onvoiceschanged = fillVoices; }
-
 // If the app was left open overnight, jump to the new day when it comes back
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !playing && !manualDay && !sameDay(current, new Date())) goTo(new Date());
