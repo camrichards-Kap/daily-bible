@@ -399,15 +399,22 @@ async function loadEsvDay() {
   if (r.status === 401 || r.status === 403) throw new Error("key");
   if (!r.ok) throw new Error("esv");
   const j = await r.json();
-  if (!j.passages || j.passages.length !== segs.length) throw new Error("esv");
-  const map = {};
-  segs.forEach(([b, c, f], i) => {
-    const parts = j.passages[i].split(/\[(?:\d+:)?(\d+)\]/);   // "[1] text [2] text" -> verse numbers and text
-    const verses = [];
-    for (let k = 1; k < parts.length; k += 2) verses.push([+parts[k], parts[k + 1].replace(/\s+/g, " ").trim()]);
-    if (!verses.length && parts[0].trim()) verses.push([f, parts[0].replace(/\s+/g, " ").trim()]);
-    map[b + "." + c + "." + f] = verses;
-  });
+  if (!j.passages || !j.passages.length) throw new Error("esv");
+  // Crossway may return one block per chapter or merge neighbours into one, so read all the
+  // "[12] text" pieces in order and walk them along the verses we asked for.
+  const parts = j.passages.join(" ").split(/\[(?:\d+:)?(\d+)\]/);
+  const want = []; segs.forEach(([b, c, f, t], i) => { for (let v = f; v <= t; v++) want.push([i, v]); });
+  const map = {}; segs.forEach(([b, c, f]) => map[b + "." + c + "." + f] = []);
+  let p = 0;
+  for (let k = 1; k < parts.length; k += 2) {
+    const num = +parts[k], text = parts[k + 1].replace(/\(ESV\)/g, "").replace(/\s+/g, " ").trim();
+    let n = p; while (n < want.length && want[n][1] !== num) n++;     // skips verses the ESV leaves out
+    if (n === want.length) continue;
+    p = n + 1;
+    const [b, c, f] = segs[want[n][0]];
+    if (text) map[b + "." + c + "." + f].push([num, text]);
+  }
+  if (!Object.values(map).some(v => v.length)) throw new Error("esv");
   esvDay = { key: dayKey, map };
   return map;
 }
