@@ -144,6 +144,8 @@ select, input[type="text"] {
 .note strong { color: var(--fg); font-weight: 600; }
 .note ol { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 4px; }
 .note a { color: var(--accent); }
+.note a.go { display: block; margin-top: 14px; padding: 13px 16px; border-radius: 12px; background: var(--accent); color: var(--on-accent); font-weight: 600; text-align: center; text-decoration: none; }
+.note .or { margin: 14px 0 0; }
 .text-foot { margin-top: 24px; font: 400 12px/1.5 var(--ui); color: var(--muted); text-align: center; }
 .text-foot a { color: var(--accent); }
 .version { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
@@ -255,7 +257,7 @@ select, input[type="text"] {
 
 
   <article class="text" id="text" aria-live="off"></article>
-  <p class="version">Version 10</p>
+  <p class="version">Version 11</p>
 </main>
 
 <div class="player">
@@ -412,6 +414,12 @@ async function fetchChapter(tr, b, c) {
   throw new Error("fetch failed");
 }
 let esvDay = null;
+// Compass Bible Church shows the same plan's ESV text, one page per date
+function compassLink() {
+  const d = new Date(current); if (d.getMonth() === 1 && d.getDate() === 29) d.setDate(28);
+  const month = ["january","february","march","april","may","june","july","august","september","october","november","december"][d.getMonth()];
+  return `<a class="go" href="https://www.compasschurch.org/dbr/${month}-${d.getDate()}/" target="_blank" rel="noopener">Read the ESV text at Compass</a>`;
+}
 // Crossway's terms: never show more than half of a book on one page (books of one or two chapters are exempt).
 // Returns a test for which of the day's chapters may be shown; the rest get a link to esv.org instead.
 function esvAllowed() {
@@ -511,7 +519,7 @@ function loadText() {
   const art = $("text");
   queue = []; queuePromise = null; lastWord = lastItem = null;
   if (settings.tr === "esv" && !settings.key.trim()) {
-    art.innerHTML = '<div class="note"><strong>The ESV audio is ready. Tap play.</strong> To also read along in ESV, add a free key from Crossway:<ol><li>Go to <a href="https://api.esv.org/account/create-application/" target="_blank" rel="noopener">api.esv.org</a> and create a free account.</li><li>Create an API application. Personal, non-commercial use is free.</li><li>Copy the key it gives you.</li><li>Open Settings here and paste it under ESV text key.</li></ol></div>';
+    art.innerHTML = '<div class="note"><strong>The ESV audio is ready. Tap play.</strong> To follow along, open the text on Compass Bible Church\'s reading page.' + compassLink() + '<p class="or">To read along inside this app instead, add a free key from Crossway:</p><ol><li>Go to <a href="https://api.esv.org/account/create-application/" target="_blank" rel="noopener">api.esv.org</a> and create a free account.</li><li>Create an API application. Personal, non-commercial use is free.</li><li>Copy the key it gives you.</li><li>Open Settings here and paste it under ESV text key.</li></ol></div>';
     return;
   }
   art.innerHTML = '<p class="note">Loading the text…</p>';
@@ -526,8 +534,8 @@ function loadText() {
     if (id !== loadId) return null;
     if (tr === "esv") {
       art.innerHTML = e.message === "key"
-        ? '<p class="note"><strong>Crossway didn\'t accept that key.</strong> Check it in Settings under ESV text key. The audio still plays.</p>'
-        : '<p class="note"><strong>Couldn\'t load the ESV text.</strong> Check your connection and reopen the app. The audio still plays.</p>';
+        ? '<p class="note"><strong>Crossway didn\'t accept that key.</strong> Check it in Settings under ESV text key. The audio still plays.' + compassLink() + '</p>'
+        : '<p class="note"><strong>Couldn\'t load the ESV text.</strong> Check your connection and reopen the app. The audio still plays.' + compassLink() + '</p>';
       queuePromise = null; return null;
     }
     art.innerHTML = '<p class="note"><strong>Couldn\'t load the text.</strong> The app\'s text folder may not have been uploaded with it. Upload the whole daily-bible.zip, not just index.html.</p>';
